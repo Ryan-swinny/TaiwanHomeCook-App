@@ -4,9 +4,9 @@ import Foundation
 struct CheckoutView: View {
     
     @EnvironmentObject var orderManager: OrderManager
-    @Environment(\.dismiss) var dismiss // 用來關閉結帳頁面
+    @Environment(\.dismiss) var dismiss
     
-    // 🐞 修正一：新增狀態追蹤訂單是否送出
+    // 追蹤訂單是否送出
     @State private var isOrderSubmitted: Bool = false
     
     // 結帳所需的輸入狀態
@@ -17,17 +17,15 @@ struct CheckoutView: View {
     let paymentOptions = ["貨到付款", "信用卡 / Apple Pay", "LINE Pay"]
     
     var finalPrice: Double {
-        orderManager.totalPrice + 60 // 包含 $60 配送費
+        orderManager.totalPrice + 60
     }
     
     var isFormValid: Bool {
-        // 檢查地址和聯絡電話是否填寫
         !deliveryAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !contactNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
     var body: some View {
-        // 🐞 修正二：將 NavigationView 替換為 NavigationStack (現代 SwiftUI)
         NavigationStack {
             Form {
                 // MARK: - 1. 配送資訊
@@ -93,7 +91,7 @@ struct CheckoutView: View {
             .padding(.horizontal)
             .padding(.bottom, 20)
             
-            // 🐞 修正三：使用 navigationDestination 處理送出後的跳轉
+            // 使用 navigationDestination 處理送出後的跳轉
             .navigationDestination(isPresented: $isOrderSubmitted) {
                 // 訂單送出後，跳轉到確認頁面
                 OrderConfirmationView()
@@ -103,24 +101,30 @@ struct CheckoutView: View {
     
     // 訂單送出邏輯
     func submitOrder() {
-        // 1. 模擬訂單處理
-        print("--- 訂單已送出 ---")
-        // ... (其他 print 內容) ...
-        
-        // 2. 清空購物車，模擬交易完成
-        orderManager.clearCart()
-        
-        // 3. 🐞 觸發 NavigationStack 內的跳轉
-        isOrderSubmitted = true
-        
-        // 這裡不再需要 dismiss()，因為 OrderConfirmationView 裡的按鈕會處理 dismiss
+        // 呼叫 OrderManager 的最終提交方法，將表單數據傳遞給 OrderManager 處理
+        orderManager.finalSubmitOrder(
+            address: deliveryAddress,
+            contact: contactNumber,
+            payment: selectedPayment
+        ) { success in
+            
+            // 成功提交到 Firestore
+            if success {
+                print("【FIREBASE SUCCESS】訂單已成功寫入 Firestore！")
+                // 觸發跳轉到 OrderConfirmationView
+                isOrderSubmitted = true
+            } else {
+                // 顯示錯誤或保持在當前頁面
+                print("【FIREBASE FAILED】訂單提交失敗。")
+            }
+        }
     }
 }
 
 #Preview {
     let manager = OrderManager()
     manager.addItem(menuItem: MenuItem.sampleMenu[0], quantity: 1)
-    manager.addItem(menuItem: MenuItem.sampleMenu[1], quantity: 3)
+    manager.addItem(menuItem: MenuItem.sampleMenu[2], quantity: 1)
     
     return CheckoutView()
         .environmentObject(manager)
