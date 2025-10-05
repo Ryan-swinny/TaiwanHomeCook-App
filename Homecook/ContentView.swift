@@ -1,12 +1,20 @@
+//
+//  ContentView.swift
+//  Homecook
+//
+//  Created by Ryan.L on 5/10/2025.
+//
+
 import SwiftUI
 import CoreLocation
 
 struct ContentView: View {
     
-    // 觀察定位管理器
-    @StateObject var locationManager = LocationManager()
+    // ⭐ 修正點 1：使用 @EnvironmentObject 來存取 LocationManager
+    // @StateObject var locationManager = LocationManager() // 移除這行
+    @EnvironmentObject var locationManager: LocationManager
     
-    // 🐞 修正：重新引入 OrderManager，子視圖和 Preview 必須要它在環境中
+    // 🐞 修正：OrderManager 保持不變
     @EnvironmentObject var orderManager: OrderManager
     
     // 獲取所有私廚據點（目前使用範例數據）
@@ -19,6 +27,23 @@ struct ContentView: View {
     
     var body: some View {
         
+        // 檢查定位授權狀態，優先處理「拒絕」和「未決定」的狀態
+        switch locationManager.authorizationStatus {
+        case .denied, .restricted:
+            // 狀態一：定位被拒絕或受限，顯示錯誤頁面
+            return AnyView(permissionDeniedView)
+            
+        case .notDetermined, .authorizedAlways, .authorizedWhenInUse, .none:
+            // 狀態二：定位狀態正常或正在等待，顯示 TabView 內容
+            return AnyView(mainTabView)
+
+        @unknown default:
+            return AnyView(Text("未知狀態，請檢查 App 設定。"))
+        }
+    }
+    
+    // MARK: - Main Tab View (已授權或等待中)
+    var mainTabView: some View {
         NavigationView {
             
             // 使用 TabView 讓使用者可以在「列表」和「地圖」之間切換
@@ -42,16 +67,13 @@ struct ContentView: View {
     }
     
     // MARK: - List View Tab
-    
     var listTabView: some View {
         VStack(spacing: 0) {
             headerView
                 .padding(.bottom)
-                // 🐞 移除：這裡不再需要購物車彈出邏輯
             
-            if locationManager.authorizationStatus == .authorizedWhenInUse,
-               let userLocation = locationManager.location
-            {
+            // 檢查是否已取得位置
+            if let userLocation = locationManager.location {
                 // 如果已定位，則顯示列表
                 List {
                     Text("附近 \(locationManager.searchRadius / 1000, specifier: "%.0f") 公里內的美食：")
@@ -59,46 +81,44 @@ struct ContentView: View {
                         .foregroundColor(.orange)
                         .listRowSeparator(.hidden)
                         .padding(.top)
-
+                    
                     if nearbyCookSpots.isEmpty {
                         VStack(alignment: .center) {
                             Text("抱歉！您的附近目前沒有私房菜上線。")
-                            Text("試試調整模擬器位置，或擴大搜尋半徑！")
+                            Text("試試調整搜尋半徑！")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                         }
                         .frame(maxWidth: .infinity)
                         .listRowSeparator(.hidden)
-
+                        
                     } else {
                         // 使用 NavigationLink 包裹 CookSpotRow，點擊時進入詳情頁
                         ForEach(nearbyCookSpots, id: \.identifiableId) { spot in
                             NavigationLink {
-                                // 🐞 傳遞 OrderManager 給 CookSpotDetailView
                                 CookSpotDetailView(spot: spot)
                                     .environmentObject(orderManager)
-                            } label: {
+                            } label: { // ⭐ 修正點：必須是 label: { 而不是 label {
                                 CookSpotRow(spot: spot, userLocation: userLocation)
                             }
                         }
                     }
                 }
                 .listStyle(.plain)
-
+                
             } else {
                 Spacer()
-                locationStatusView // 顯示定位狀態的輔助視圖
+                // 顯示等待定位的狀態
+                locationStatusView
                 Spacer()
             }
         }
     }
     
     // MARK: - Map View Tab
-    
     var mapTabView: some View {
-        
-        if let userLocation = locationManager.location, locationManager.authorizationStatus == .authorizedWhenInUse {
-            
+        // 地圖只需要用戶位置和權限
+        if let userLocation = locationManager.location {
             return AnyView(
                 CookSpotMapView(
                     nearbyCookSpots: nearbyCookSpots,
@@ -119,7 +139,35 @@ struct ContentView: View {
     
     // MARK: - Helper Views
     
-    // 將定位狀態視圖拆分成獨立的計算屬性，保持 body 簡潔
+    // 輔助視圖：定位權限被拒絕時的畫面
+    var permissionDeniedView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "location.slash.fill")
+                .resizable()
+                .frame(width: 80, height: 80)
+                .foregroundColor(.red)
+            
+            Text("無法存取您的位置")
+                .font(.title2)
+                .fontWeight(.bold)
+            
+            Text("請前往設定開啟定位權限，才能找到附近的私房菜！")
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            // ⭐ Call-to-Action 按鈕：引導用戶
+            Button("重新請求權限") {
+                locationManager.requestAuthorization()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
+        }
+        .padding()
+    }
+    
+    // 輔助視圖：等待定位的狀態
     var locationStatusView: some View {
         VStack {
             Text("正在等待您的 GPS 位置...")
@@ -132,20 +180,20 @@ struct ContentView: View {
         }
     }
     
-    // 頂部標題視圖 (已移除購物車按鈕)
+    // 頂部標題視圖
     var headerView: some View {
         HStack {
             VStack(alignment: .leading) {
                 Text("🏠 回家吃飯")
                     .font(.largeTitle)
                     .fontWeight(.bold)
-                Text(locationManager.location != nil ? "目前定位成功！" : "請允許定位以搜尋附近美食")
+                
+                // 修正：更精確地反映當前狀態
+                Text(locationManager.location != nil ? "已在 \(locationManager.searchRadius / 1000, specifier: "%.0f") 公里內搜尋" : "請允許定位以搜尋附近美食")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
             Spacer()
-            
-            // 🐞 移除：這裡不再顯示購物車按鈕
         }
         .padding(.horizontal)
     }
@@ -153,6 +201,7 @@ struct ContentView: View {
 
 // 獨立的視圖：用於顯示單個私廚的資訊行 (CookSpotRow)
 struct CookSpotRow: View {
+    // 保持不變...
     let spot: CookSpot
     let userLocation: CLLocation
     
@@ -178,7 +227,6 @@ struct CookSpotRow: View {
             VStack(alignment: .leading) {
                 Text(spot.name)
                     .font(.headline)
-                // 注意：這裡顯示的是 CookSpot 的 description，而非菜單項目的 description
                 Text("\(spot.cuisine) • \(spot.description)")
                     .font(.subheadline)
                     .lineLimit(1)
@@ -209,7 +257,7 @@ struct CookSpotRow: View {
     }
 }
 
-// 擴展 CLAuthorizationStatus，讓它可以直接輸出中文描述
+// 擴展 CLAuthorizationStatus，讓它可以直接輸出中文描述 (保持不變)
 extension CLAuthorizationStatus {
     var statusDescription: String {
         switch self {
@@ -224,9 +272,11 @@ extension CLAuthorizationStatus {
 }
 
 #Preview {
-    // 預覽時必須提供 OrderManager
+    // 預覽時必須提供 OrderManager 和 LocationManager
     let previewOrderManager = OrderManager()
+    let previewLocationManager = LocationManager()
     
     return ContentView()
         .environmentObject(previewOrderManager)
+        .environmentObject(previewLocationManager)
 }

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		BA2BD1E42E8FCA1400B6678A /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = BA2BD1E32E8FCA1400B6678A /* FirebaseCore */; };
 		BA2BD1E62E8FCA4B00B6678A /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = BA2BD1E52E8FCA4B00B6678A /* FirebaseFirestore */; };
+		BAAC97912E9277D0007469FD /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = BAAC97902E9277D0007469FD /* FirebaseAuth */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +43,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BA2BD1E42E8FCA1400B6678A /* FirebaseCore in Frameworks */,
+				BAAC97912E9277D0007469FD /* FirebaseAuth in Frameworks */,
 				BA2BD1E62E8FCA4B00B6678A /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -95,6 +97,7 @@
 			packageProductDependencies = (
 				BA2BD1E32E8FCA1400B6678A /* FirebaseCore */,
 				BA2BD1E52E8FCA4B00B6678A /* FirebaseFirestore */,
+				BAAC97902E9277D0007469FD /* FirebaseAuth */,
 			);
 			productName = Homecook;
 			productReference = BA7693602E8BCE6C00F07B35 /* Homecook.app */;
@@ -388,6 +391,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = BA2BD1E22E8FC97C00B6678A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		BAAC97902E9277D0007469FD /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BA2BD1E22E8FC97C00B6678A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

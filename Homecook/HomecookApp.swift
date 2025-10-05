@@ -23,11 +23,23 @@ struct HomecookApp: App {
     // 創建 OrderManager 的實例，並將它持有在 App 的生命週期中
     @StateObject var orderManager = OrderManager()
     
+    // ⭐ 新增：創建 AuthService 的實例
+    @StateObject var authService = AuthService()
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                // 將 orderManager 注入為環境物件，讓所有子視圖都能使用
-                .environmentObject(orderManager)
+            // ⭐ 修正點：根據 authService.user 的狀態來決定顯示哪個 View
+            Group {
+                // 如果 authService.user 不為 nil，表示已登入，顯示主要內容
+                if authService.user != nil {
+                    ContentView()
+                } else {
+                    // 如果 authService.user 為 nil，表示未登入，顯示登錄頁
+                    LoginView()
+                }
+            }
+            .environmentObject(orderManager)
+            .environmentObject(authService)
         }
     }
 }
