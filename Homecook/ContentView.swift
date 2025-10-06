@@ -1,8 +1,8 @@
 //
-//  ContentView.swift
-//  Homecook
+//  ContentView.swift
+//  Homecook
 //
-//  Created by Ryan.L on 5/10/2025.
+//  Created by Ryan.L on 5/10/2025.
 //
 
 import SwiftUI
@@ -11,7 +11,6 @@ import CoreLocation
 struct ContentView: View {
     
     // ⭐ 修正點 1：使用 @EnvironmentObject 來存取 LocationManager
-    // @StateObject var locationManager = LocationManager() // 移除這行
     @EnvironmentObject var locationManager: LocationManager
     
     // 🐞 修正：OrderManager 保持不變
@@ -98,7 +97,7 @@ struct ContentView: View {
                             NavigationLink {
                                 CookSpotDetailView(spot: spot)
                                     .environmentObject(orderManager)
-                            } label: { // ⭐ 修正點：必須是 label: { 而不是 label {
+                            } label: { // ⭐ 這裡的 label: { 是正確的
                                 CookSpotRow(spot: spot, userLocation: userLocation)
                             }
                         }
@@ -120,9 +119,10 @@ struct ContentView: View {
         // 地圖只需要用戶位置和權限
         if let userLocation = locationManager.location {
             return AnyView(
+                // 修正：刪除重複的 CookSpotMapView 呼叫，並使用參數標籤和 .coordinate
                 CookSpotMapView(
-                    nearbyCookSpots: nearbyCookSpots,
-                    userLocation: userLocation
+                    nearbyCookSpots: nearbyCookSpots, // L123: 缺少參數標籤
+                    userLocation: userLocation.coordinate // L125: 修正類型錯誤
                 )
             )
         } else {

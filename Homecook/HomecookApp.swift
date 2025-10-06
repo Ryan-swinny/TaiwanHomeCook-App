@@ -1,45 +1,54 @@
-// HomecookApp.swift
+//
+//  HomecookApp.swift
+//  Homecook
+//
+//  Created by Ryan.L on 5/10/2025.
+//
 
 import SwiftUI
-import FirebaseCore // 1. 🐞 確保這裡有導入 FirebaseCore
+import FirebaseCore // 確保 Firebase Core 導入
 
-// 定義一個 AppDelegate，負責在 App 啟動時呼叫 FirebaseApp.configure()
+// MARK: - 1. AppDelegate 處理 Firebase 初始化
 class AppDelegate: NSObject, UIApplicationDelegate {
   func application(_ application: UIApplication,
                    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
-    
-    // 2. 🐞 關鍵：在 App 啟動完成時執行初始化
+    // 確保 Firebase 在 App 啟動時配置
     FirebaseApp.configure()
     return true
   }
 }
 
+// MARK: - 2. App 結構與環境注入
 @main
 struct HomecookApp: App {
     
-    // 3. 🐞 引入 AppDelegate 讓 SwiftUI App 執行應用程式生命週期方法
+    // 應用程式委託，用於處理 Firebase 設定
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     
-    // 創建 OrderManager 的實例，並將它持有在 App 的生命週期中
-    @StateObject var orderManager = OrderManager()
-    
-    // ⭐ 新增：創建 AuthService 的實例
+    // ⭐ 修正點：所有 managers 必須在這裡獨立實例化，並使用小寫駝峰命名法
+    // 確保這些 managers 自身的 init() 內部沒有嘗試創建其他 managers 的實例
     @StateObject var authService = AuthService()
+    @StateObject var orderManager = OrderManager()
+    @StateObject var locationManager = LocationManager() // 必須包含定位管理器
+    @StateObject var cookSpotManager = CookSpotManager() // 變數名稱使用小寫駝峰
+    
+    // 注意：SwiftUI App 結構體必須在 body 之前完成所有 @StateObject 屬性的初始化。
     
     var body: some Scene {
         WindowGroup {
-            // ⭐ 修正點：根據 authService.user 的狀態來決定顯示哪個 View
             Group {
-                // 如果 authService.user 不為 nil，表示已登入，顯示主要內容
+                // 根據認證狀態切換根視圖
                 if authService.user != nil {
                     ContentView()
                 } else {
-                    // 如果 authService.user 為 nil，表示未登入，顯示登錄頁
                     LoginView()
                 }
             }
-            .environmentObject(orderManager)
+            // 統一將所有服務注入環境
             .environmentObject(authService)
+            .environmentObject(orderManager)
+            .environmentObject(locationManager)
+            .environmentObject(cookSpotManager)
         }
     }
 }

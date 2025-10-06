@@ -1,44 +1,42 @@
+// CookSpotDetailView.swift 檔案內容
+
 import SwiftUI
 
 // MARK: - 1. 主詳情頁視圖
 
 struct CookSpotDetailView: View {
     
-    // 確保 CookSpotDetailView 擁有 OrderManager 存取權限
     @EnvironmentObject var orderManager: OrderManager
     
-    // 狀態：控制 Toast 顯示
     @State private var isToastVisible = false
     @State private var toastMessage = ""
-    @State private var isCheckoutPresented: Bool = false // 用於 CheckoutView
-    @State private var isCartPresented: Bool = false     // 用於 CartView 編輯
+    @State private var isCheckoutPresented: Bool = false
+    @State private var isCartPresented: Bool = false
     
-    // 接收點選的私廚數據
     let spot: CookSpot
     
     // 假設每個私廚的菜單都一樣
+    // ⚠️ 警告：這裡的 MenuItem.sampleMenu 必須在別處定義
     let menuItems = MenuItem.sampleMenu
     
     // 篩選出用戶評價（前三喜歡/最新）
     var topReviews: [Review] {
-        //
         return spot.reviews.filter { $0.rating >= 4.0 }.sorted(by: { $0.rating > $1.rating }).prefix(3).map { $0 }
     }
     
-    // 假設前兩個菜色是熱賣商品 (實際應由後端提供數據)
+    // 假設前兩個菜色是熱賣商品
     var hotItems: [MenuItem] {
         return menuItems.prefix(2).map { $0 }
     }
 
     var body: some View {
         
-        // 使用 ZStack 讓購物車浮動在內容上方
         ZStack(alignment: .bottom) {
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 25) {
                     
-                    // MARK: 區塊 1: 品牌簡介與拿手菜 (老闆大頭照下方)
+                    // MARK: 區塊 1: 品牌簡介與拿手菜
                     VStack(alignment: .leading, spacing: 5) {
                         HStack(alignment: .top) {
                             // 模擬老闆大頭照
@@ -72,7 +70,7 @@ struct CookSpotDetailView: View {
                     .padding(.horizontal)
                     
                     
-                    // MARK: 區塊 2: 今日熱賣商品 (垂直盒子 1)
+                    // MARK: 區塊 2: 今日熱賣商品
                     if !hotItems.isEmpty {
                         VStack(alignment: .leading) {
                             Text("🔥 今日熱賣商品")
@@ -96,7 +94,7 @@ struct CookSpotDetailView: View {
                         .padding(.leading)
                     }
                     
-                    // MARK: 區塊 3: 用戶評價 (前三喜歡) (垂直盒子 4)
+                    // MARK: 區塊 3: 用戶評價 (前三喜歡)
                     if !topReviews.isEmpty {
                         VStack(alignment: .leading) {
                             Text("⭐ 用戶好評推薦 (\(spot.rating, specifier: "%.1f") 評分)")
@@ -110,7 +108,7 @@ struct CookSpotDetailView: View {
                         .padding(.horizontal)
                     }
                     
-                    // MARK: 區塊 4: 完整菜單 (垂直盒子 3 - 主要菜色)
+                    // MARK: 區塊 4: 完整菜單 (主要菜色)
                     VStack(alignment: .leading) {
                         Text("📜 完整菜單")
                             .font(.title3)
@@ -140,7 +138,6 @@ struct CookSpotDetailView: View {
         .navigationTitle("私廚主頁")
         .navigationBarTitleDisplayMode(.inline)
         
-        // 🐞 修正：將所有 Sheet 邏輯放在 ZStack 的修飾符上
         .toast(message: toastMessage, isVisible: $isToastVisible)
         .sheet(isPresented: $isCheckoutPresented) {
             CheckoutView() // 結帳頁面
@@ -156,14 +153,13 @@ struct CookSpotDetailView: View {
     // 新增：底部浮動購物車視圖
     var floatingCartFooter: some View {
         
-        // 只有當購物車有商品時才顯示
         Group {
             if orderManager.totalQuantity > 0 {
                 VStack(spacing: 0) {
                     Divider() // 分隔線
                     HStack {
                         
-                        // 1. 🐞 點擊總覽區塊：彈出 CartView 進行數量增減
+                        // 1. 點擊總覽區塊：彈出 CartView 進行數量增減
                         Button {
                             isCartPresented = true
                         } label: {
@@ -214,20 +210,17 @@ struct CookSpotDetailView: View {
             }
         }
     }
-
 } // CookSpotDetailView 結構結束
 
 // MARK: - 2. 單一菜色項目視圖 (MenuItemView)
 
 struct MenuItemView: View {
-    
-    // 追蹤購物車狀態
+    // ... (MenuItemView 保持不變)
     @EnvironmentObject var orderManager: OrderManager
     
     let item: MenuItem
     let addItemAction: () -> Void
     
-    // 計算屬性：獲取該商品在購物車中的當前數量
     var currentQuantity: Int {
         orderManager.items.first(where: { $0.menuItem == item })?.quantity ?? 0
     }
@@ -235,26 +228,24 @@ struct MenuItemView: View {
     var body: some View {
         HStack(alignment: .top) {
             
-            // 🐞 修正：使用 AsyncImage 處理圖片載入
             if let imageURLString = item.imageURL, let url = URL(string: imageURLString) {
                 AsyncImage(url: url) { phase in
                     if let image = phase.image {
-                        image // 圖片載入成功
+                        image
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                     } else if phase.error != nil {
-                        Image(systemName: "xmark.octagon") // 載入失敗
+                        Image(systemName: "xmark.octagon")
                             .resizable()
                             .foregroundColor(.red)
                     } else {
-                        ProgressView() // 載入中
+                        ProgressView()
                     }
                 }
                 .frame(width: 60, height: 60)
-                .clipped() // 裁剪以確保圖片是方形
+                .clipped()
                 .cornerRadius(8)
             } else {
-                // 如果沒有 URL，顯示一個預設圖標
                 Image(systemName: "photo.fill.on.rectangle.fill")
                     .resizable()
                     .frame(width: 60, height: 60)
@@ -276,24 +267,20 @@ struct MenuItemView: View {
             Spacer()
             
             VStack(alignment: .trailing) {
-                // 價格 Text (保持不變)
                 Text(item.price, format: .currency(code: "TWD").precision(.fractionLength(0)))
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.orange)
                 
                 if item.isAvailable {
-                    // 3. 替換原來的「點餐」按鈕為數量控制介面
                     if currentQuantity == 0 {
-                        // 如果數量為 0，顯示「點餐」按鈕 (只負責 +1)
                         Button("點餐") {
-                            addItemAction() // 呼叫父視圖傳遞的動作 (+1 和 Toast)
+                            addItemAction()
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.green)
                         .controlSize(.small)
                     } else {
-                        // 如果數量大於 0，顯示數量調整控制器
                         quantityControl
                     }
                 } else {
@@ -304,16 +291,12 @@ struct MenuItemView: View {
             }
         }
         .padding(.vertical, 8)
-        Divider() // 分隔線
+        Divider()
     }
     
-    // 新增：數量調整控制器 (包含 -, 數字, +)
     var quantityControl: some View {
         HStack(spacing: 12) {
-            
-            // 減少數量按鈕 (-)
             Button {
-                // 呼叫 OrderManager 的 updateQuantity 函數，數量減 1
                 if let cartItem = orderManager.items.first(where: { $0.menuItem == item }) {
                     orderManager.updateQuantity(item: cartItem, newQuantity: currentQuantity - 1)
                 }
@@ -323,14 +306,11 @@ struct MenuItemView: View {
             }
             .buttonStyle(.plain)
             
-            // 顯示當前數量
             Text("\(currentQuantity)")
                 .font(.headline)
                 .frame(minWidth: 20)
             
-            // 增加數量按鈕 (+)
             Button {
-                // 呼叫父視圖傳遞的動作，處理數量加 1 和 Toast
                 addItemAction()
             } label: {
                 Image(systemName: "plus.circle.fill")
@@ -344,18 +324,17 @@ struct MenuItemView: View {
 // MARK: - 3. 輔助 View：熱賣商品卡片 (HotItemCard)
 
 struct HotItemCard: View {
+    // ... (HotItemCard 保持不變)
     @EnvironmentObject var orderManager: OrderManager
     let item: MenuItem
     let addItemAction: () -> Void
     
-    // 計算屬性：獲取該商品在購物車中的當前數量
     var currentQuantity: Int {
         orderManager.items.first(where: { $0.menuItem == item })?.quantity ?? 0
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            // 圖片 (使用 AsyncImage 模擬)
             if let imageURLString = item.imageURL, let url = URL(string: imageURLString) {
                 AsyncImage(url: url) { phase in
                     if let image = phase.image {
@@ -383,9 +362,7 @@ struct HotItemCard: View {
                 
                 Spacer()
                 
-                // 點擊按鈕 (簡化為直接增加)
                 Button {
-                    // 呼叫父視圖傳遞的動作，處理數量加 1 和 Toast
                     addItemAction()
                 } label: {
                     Image(systemName: currentQuantity > 0 ? "checkmark.circle.fill" : "plus.circle.fill")
@@ -401,6 +378,7 @@ struct HotItemCard: View {
 // MARK: - 4. 輔助 View：評價單行 (ReviewRow)
 
 struct ReviewRow: View {
+    // ... (ReviewRow 保持不變)
     let review: Review
     
     var body: some View {
@@ -412,8 +390,7 @@ struct ReviewRow: View {
                 Spacer()
                 Image(systemName: "hand.thumbsup.fill")
                     .foregroundColor(.blue)
-                    .opacity(review.rating >= 4.0 ? 1 : 0) // 評分高才顯示讚
-                // 🐞 修正：使用新的格式化語法
+                    .opacity(review.rating >= 4.0 ? 1 : 0)
                 Text(review.rating, format: .number.precision(.fractionLength(1)))
             }
             Text(review.comment)
@@ -426,13 +403,19 @@ struct ReviewRow: View {
 }
 
 // 預覽 (使用範例數據)
+// ⚠️ 警告：這個 #Preview 必須在 CookSpotDetailView.swift 中
 #Preview {
-    // 預覽時必須手動創建 OrderManager 實例
     let previewOrderManager = OrderManager()
     
+    // ⚠️ 警告：這裡的 CookSpot.sampleCookSpots 必須可見
     return NavigationView {
         CookSpotDetailView(spot: CookSpot.sampleCookSpots.first!)
-            // 必須將 OrderManager 注入預覽環境
             .environmentObject(previewOrderManager)
     }
-}
+}//
+//  cookspotDetailView.swift
+//  Homecook
+//
+//  Created by Ryan.L on 6/10/2025.
+//
+

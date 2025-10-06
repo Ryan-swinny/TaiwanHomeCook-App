@@ -1,52 +1,62 @@
+//
+//  DatabaseService.swift
+//  Homecook
+//
+//  Created by Ryan.L on 5/10/2025.
+//
+
 import Foundation
 import FirebaseFirestore
-// 🐞 修正：我們不再導入 FirebaseFirestoreSwift，因為它已整合
-// 移除 import FirebaseFirestoreSwift
 
-// DatabaseService 類別：處理所有與 Firestore 的數據交互
+// 導入 CookSpot 結構，確保類型可用
+// import CookSpot // 假設 CookSpot 已經被正確導入或定義
+
+/// 處理所有與 Firestore 的數據交互
 class DatabaseService {
     
-    // 取得 Firestore 資料庫實例
     private let db = Firestore.firestore()
-    private let cookSpotsCollection = "cookSpots" // 假設您的私廚數據集合名稱
-    private let ordersCollection = "orders"     // 假設您的訂單數據集合名稱
+    private let cookSpotsCollection = "cookSpots" // 私廚數據集合名稱
+    private let ordersCollection = "orders"     // 訂單數據集合名稱
     
-    // MARK: - 1. 讀取數據 (Fetch CookSpots)
+    // MARK: - 1. 讀取數據 (實時監聽 CookSpots)
     
-    // 獲取所有私廚據點的數據
-    func fetchCookSpots(completion: @escaping ([CookSpot]) -> Void) {
+    /// 設置一個實時監聽器來持續追蹤 CookSpots 集合中的變動。
+    /// - Parameter completion: 每當數據有變動時，就會觸發這個包含最新 CookSpot 列表的回調。
+    /// - Returns: Firestore ListenerRegistration，用於在不再需要時移除監聽器。
+    func subscribeToCookSpots(completion: @escaping ([CookSpot]) -> Void) -> ListenerRegistration {
         
-        db.collection(cookSpotsCollection)
-            // 讀取所有數據
-            .getDocuments { snapshot, error in
-            
-            if let error = error {
-                print("Error fetching CookSpots: \(error.localizedDescription)")
-                completion([])
-                return
-            }
-            
-            // 將 Firestore 文件轉換為我們的 CookSpot 結構
-            let spots = snapshot?.documents.compactMap { doc -> CookSpot? in
-                // 必須使用 try? 處理，因為 Firestore 的 data(as:) 仍然可能失敗
-                do {
-                    // 使用 Firestore 的 data(as:) 進行自動解碼 (現在已整合)
-                    var spot = try doc.data(as: CookSpot.self)
-                    spot.id = UUID(uuidString: doc.documentID)
-                    return spot
-                } catch {
-                    print("Error decoding CookSpot: \(error)")
-                    return nil
+        // ⭐ 關鍵：使用 addSnapshotListener 進行實時監聽
+        return db.collection(cookSpotsCollection)
+            .addSnapshotListener { snapshot, error in
+                
+                if let error = error {
+                    print("Error listening to CookSpots: \(error.localizedDescription)")
+                    completion([])
+                    return
                 }
-            } ?? []
-            
-            completion(spots)
-        }
+                
+                // 將 Firestore 文件轉換為我們的 CookSpot 結構
+                let spots = snapshot?.documents.compactMap { doc -> CookSpot? in
+                    do {
+                        // 嘗試解碼為 CookSpot 結構
+                        var spot = try doc.data(as: CookSpot.self)
+                        // 使用 Firestore 文件 ID 作為 CookSpot 的 ID
+                        spot.id = UUID(uuidString: doc.documentID)
+                        return spot
+                    } catch {
+                        print("Error decoding CookSpot: \(error)")
+                        return nil
+                    }
+                } ?? []
+                
+                // 數據更新，呼叫回調函數
+                completion(spots)
+            }
     }
     
     // MARK: - 2. 寫入數據 (Submit Order)
     
-    // 將完成的訂單提交到 Firestore
+    // 訂單寫入邏輯保持不變
     func submitOrder(orderData: [String: Any], completion: @escaping (Bool) -> Void) {
         
         var ref: DocumentReference? = nil
