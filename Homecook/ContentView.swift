@@ -7,38 +7,67 @@
 
 import SwiftUI
 import CoreLocation
+import Combine // 確保導入 Combine
 
 struct ContentView: View {
     
-    // ⭐ 修正點 1：使用 @EnvironmentObject 來存取 LocationManager
     @EnvironmentObject var locationManager: LocationManager
-    
-    // 🐞 修正：OrderManager 保持不變
     @EnvironmentObject var orderManager: OrderManager
+    @EnvironmentObject var firebaseManager: FirebaseManager
     
-    // 獲取所有私廚據點（目前使用範例數據）
-    let allCookSpots = CookSpot.sampleCookSpots
+    // 儲存實時數據
+    @State private var allCookSpots: [CookSpot] = []
+    
+    // 追蹤數據訂閱
+    @State private var cancellable: AnyCancellable?
     
     // 根據定位結果，篩選出附近的私廚
     var nearbyCookSpots: [CookSpot] {
         locationManager.filterCookSpots(allSpots: allCookSpots)
     }
     
+    // MARK: - Body View
     var body: some View {
         
         // 檢查定位授權狀態，優先處理「拒絕」和「未決定」的狀態
-        switch locationManager.authorizationStatus {
-        case .denied, .restricted:
-            // 狀態一：定位被拒絕或受限，顯示錯誤頁面
-            return AnyView(permissionDeniedView)
-            
-        case .notDetermined, .authorizedAlways, .authorizedWhenInUse, .none:
-            // 狀態二：定位狀態正常或正在等待，顯示 TabView 內容
-            return AnyView(mainTabView)
+        let mainContent: AnyView = {
+            switch locationManager.authorizationStatus {
+            case .denied, .restricted:
+                return AnyView(permissionDeniedView)
+                
+            case .notDetermined, .authorizedAlways, .authorizedWhenInUse, .none:
+                // 這裡我們需要檢查數據是否載入完成
+                if firebaseManager.isLoading {
+                    // ⭐ 顯示 RamenLoadingView (麵條升降動畫)
+                    return AnyView(RamenLoadingView())
+                } else {
+                    return AnyView(mainTabView)
+                }
 
-        @unknown default:
-            return AnyView(Text("未知狀態，請檢查 App 設定。"))
-        }
+            @unknown default:
+                return AnyView(Text("未知狀態，請檢查 App 設定。"))
+            }
+        }()
+        
+        // 將 onAppear 應用在最終的 View 實體上
+        return mainContent
+            .onAppear {
+                self.setupCookSpotsSubscription()
+            }
+    }
+    
+    // 設置 Combine 數據訂閱
+    func setupCookSpotsSubscription() {
+        // 清除舊的訂閱，確保只訂閱一次
+        cancellable?.cancel()
+        
+        // 訂閱 Manager 發佈者
+        cancellable = firebaseManager.cookSpotsPublisher
+            .receive(on: DispatchQueue.main) // 確保在主執行緒上更新 UI
+            .sink { latestSpots in // 移除 [weak self]，因為 ContentView 是 Struct
+                // 當收到新數據時，更新 @State 屬性
+                self.allCookSpots = latestSpots
+            }
     }
     
     // MARK: - Main Tab View (已授權或等待中)
@@ -81,12 +110,21 @@ struct ContentView: View {
                         .listRowSeparator(.hidden)
                         .padding(.top)
                     
+                    // 核心修正：避免在載入完成前顯示「抱歉」訊息
                     if nearbyCookSpots.isEmpty {
                         VStack(alignment: .center) {
-                            Text("抱歉！您的附近目前沒有私房菜上線。")
-                            Text("試試調整搜尋半徑！")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
+                            if firebaseManager.isLoading {
+                                // 數據仍在載入中，顯示進度條 (狀態 B)
+                                ProgressView("正在篩選附近美食...")
+                                    .font(.subheadline)
+                                    .padding(.vertical, 30)
+                            } else {
+                                // 數據載入完成，但列表為空 (狀態 C)
+                                Text("抱歉！您的附近目前沒有私房菜上線。")
+                                Text("試試調整搜尋半徑！")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                            }
                         }
                         .frame(maxWidth: .infinity)
                         .listRowSeparator(.hidden)
@@ -97,7 +135,7 @@ struct ContentView: View {
                             NavigationLink {
                                 CookSpotDetailView(spot: spot)
                                     .environmentObject(orderManager)
-                            } label: { // ⭐ 這裡的 label: { 是正確的
+                            } label: {
                                 CookSpotRow(spot: spot, userLocation: userLocation)
                             }
                         }
@@ -107,7 +145,7 @@ struct ContentView: View {
                 
             } else {
                 Spacer()
-                // 顯示等待定位的狀態
+                // 顯示等待定位的狀態 (狀態 A)
                 locationStatusView
                 Spacer()
             }
@@ -119,10 +157,9 @@ struct ContentView: View {
         // 地圖只需要用戶位置和權限
         if let userLocation = locationManager.location {
             return AnyView(
-                // 修正：刪除重複的 CookSpotMapView 呼叫，並使用參數標籤和 .coordinate
                 CookSpotMapView(
-                    nearbyCookSpots: nearbyCookSpots, // L123: 缺少參數標籤
-                    userLocation: userLocation.coordinate // L125: 修正類型錯誤
+                    nearbyCookSpots: nearbyCookSpots,
+                    userLocation: userLocation.coordinate
                 )
             )
         } else {
@@ -157,7 +194,7 @@ struct ContentView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
-            // ⭐ Call-to-Action 按鈕：引導用戶
+            // Call-to-Action 按鈕：引導用戶
             Button("重新請求權限") {
                 locationManager.requestAuthorization()
             }
@@ -199,9 +236,93 @@ struct ContentView: View {
     }
 }
 
+// ⭐ 輔助 View: 載入畫面 (RamenLoadingView - 模擬麵條升降動畫)
+struct RamenLoadingView: View {
+    
+    // 核心修正: 替換為指定的單一提示
+    private let singleHint = "請稍後，正在為您找到合適的家廚"
+    
+    // 模擬麵條和配料上下移動的狀態
+    @State private var offsetUp: Bool = false
+    
+    var body: some View {
+        VStack(spacing: 25) {
+            Spacer()
+            
+            // 1. 麵條與配料動畫模擬
+            ZStack {
+                // 配料：雞蛋 (使用 circle.fill 模擬)
+                Image(systemName: "circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundColor(.white)
+                    .overlay(
+                        Circle().fill(Color.orange).frame(width: 15, height: 15)
+                    )
+                    .offset(x: -25, y: offsetUp ? -110 : -100)
+                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true).delay(0.2), value: offsetUp)
+                
+                // 配料：蔬菜 (使用三角形模擬)
+                Image(systemName: "triangle.fill")
+                    .font(.system(size: 15))
+                    .foregroundColor(.green)
+                    .offset(x: 30, y: offsetUp ? -70 : -60)
+                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true).delay(0.5), value: offsetUp)
+
+                // 麵條：使用多個線條模擬
+                HStack(spacing: 5) {
+                    ForEach(0..<5) { index in
+                        Capsule() // 使用 Capsule 模擬粗麵條
+                            .fill(Color.yellow.opacity(0.8))
+                            .frame(width: 5, height: 100)
+                            .offset(y: offsetUp ? -100 : 0) // 整體升降
+                            .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true).delay(Double(index) * 0.1), value: offsetUp)
+                    }
+                }
+                .frame(height: 100)
+                .mask(
+                    Rectangle() // 使用矩形遮罩讓它看起來是從碗裡出來的
+                )
+                
+                // 核心修正: 替換矩形為自定義的 BowlShape
+                BowlShape()
+                    .fill(Color.white)
+                    .frame(width: 150, height: 80) // 增加高度以容納曲線
+                    .overlay(
+                        BowlShape() // 碗的邊緣 (線條)
+                            .stroke(Color.black.opacity(0.8), lineWidth: 4)
+                            .frame(width: 150, height: 80)
+                    )
+                    .offset(y: 50)
+            }
+            .frame(height: 150)
+            .onAppear {
+                offsetUp = true
+            }
+            .padding(.bottom, 30)
+
+            // 2. 幽默提示
+            Text(singleHint) // ⭐ 核心修正: 使用單一提示
+                .font(.title3)
+                .fontWeight(.medium)
+                .foregroundColor(.primary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            
+            // 3. 標準進度條
+            ProgressView()
+                .padding(.top, 10)
+            
+            Spacer()
+        }
+        // ⭐ 核心修正: 添加溫暖的背景色
+        .frame(maxWidth: .infinity, maxHeight: .infinity) // 填充整個螢幕
+        .background(Color.warmSkintone.edgesIgnoringSafeArea(.all)) // 設置背景色並忽略安全區域
+    }
+}
+
+
 // 獨立的視圖：用於顯示單個私廚的資訊行 (CookSpotRow)
 struct CookSpotRow: View {
-    // 保持不變...
     let spot: CookSpot
     let userLocation: CLLocation
     
@@ -271,12 +392,43 @@ extension CLAuthorizationStatus {
     }
 }
 
+// ⭐ 新增: 自定義 Shape 實現完美的碗型弧線
+struct BowlShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        
+        let width = rect.size.width
+        let height = rect.size.height
+        
+        // 1. 碗的頂部 (直線)
+        path.move(to: CGPoint(x: 0, y: 0))
+        path.addLine(to: CGPoint(x: width, y: 0))
+        
+        // 2. 碗的底部 (二次貝塞爾曲線，模擬圓弧)
+        path.addQuadCurve(
+            to: CGPoint(x: 0, y: 0),
+            control: CGPoint(x: width / 2, y: height * 1.5) // 將控制點拉低，製造向下的深度和圓弧
+        )
+        
+        return path
+    }
+}
+
+
+// ⭐ 核心修正: 擴展 Color 增加一個溫暖的肌膚色
+extension Color {
+    static let silverMist = Color(red: 0.7, green: 0.7, blue: 0.7)
+    static let warmSkintone = Color(red: 0.96, green: 0.94, blue: 0.90) // 柔和的米色/淺暖黃，類似 #F5F0E6
+}
+
 #Preview {
-    // 預覽時必須提供 OrderManager 和 LocationManager
+    // 預覽時必須提供所有 EnvironmentObject
     let previewOrderManager = OrderManager()
     let previewLocationManager = LocationManager()
+    let previewFirebaseManager = FirebaseManager()
     
     return ContentView()
         .environmentObject(previewOrderManager)
         .environmentObject(previewLocationManager)
+        .environmentObject(previewFirebaseManager)
 }
