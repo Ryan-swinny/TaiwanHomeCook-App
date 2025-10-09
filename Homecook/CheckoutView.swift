@@ -4,7 +4,12 @@ import Foundation
 struct CheckoutView: View {
     
     @EnvironmentObject var orderManager: OrderManager
+    @EnvironmentObject var authService: AuthService
     @Environment(\.dismiss) var dismiss
+    
+    // ⭐ 新增：用於選項 B 的狀態追蹤 (載入與錯誤)
+    @State private var isSubmitting: Bool = false
+    @State private var submissionError: String?
     
     // 追蹤訂單是否送出
     @State private var isOrderSubmitted: Bool = false
@@ -67,6 +72,13 @@ struct CheckoutView: View {
                             .foregroundColor(.orange)
                     }
                 }
+                
+                // ⭐ 新增：錯誤訊息顯示 (Option B)
+                if let error = submissionError {
+                    Text("訂單提交失敗：\(error)")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
             }
             .navigationTitle("確認訂單")
             .toolbar {
@@ -74,19 +86,33 @@ struct CheckoutView: View {
                     dismiss()
                 }
             }
+            // 預填資料 (Option A)
+            .onAppear {
+                self.prefillUserData()
+            }
             
             // 底部送出按鈕
             VStack {
-                Button("確認並送出訂單") {
+                Button {
                     submitOrder()
+                } label: {
+                    if isSubmitting {
+                        ProgressView() // 載入中動畫
+                            .progressViewStyle(.circular)
+                            .tint(.white)
+                    } else {
+                        Text("確認並送出訂單")
+                    }
                 }
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(isFormValid ? Color.green : Color.gray)
+                // 修正：加入 isSubmitting 判斷，避免在載入時改變背景
+                .background(isFormValid && !isSubmitting ? Color.green : Color.gray)
                 .foregroundColor(.white)
                 .cornerRadius(10)
-                .disabled(!isFormValid) // 如果表單無效則禁用按鈕
+                // 修正：當表單無效或正在提交時禁用按鈕
+                .disabled(!isFormValid || isSubmitting)
             }
             .padding(.horizontal)
             .padding(.bottom, 20)
@@ -99,23 +125,46 @@ struct CheckoutView: View {
         }
     }
     
-    // 訂單送出邏輯
+    // ⭐ 修正：預填用戶資料的邏輯
+    func prefillUserData() {
+        if let profile = authService.currentProfile {
+            // 優先使用 Profile 中的資料進行預填
+            if let address = profile.address, !address.isEmpty {
+                self.deliveryAddress = address
+            }
+            if let contact = profile.contactNumber, !contact.isEmpty {
+                self.contactNumber = contact
+            }
+            
+            // 如果用戶是私廚 (cooker)，可以預設使用註冊 email 作為聯絡方式
+            if profile.role == "我是私廚" {
+                // 這裡可以根據你的數據結構決定如何預填
+            }
+        }
+    }
+    
+    // ⭐ 修正：訂單送出邏輯 (加入載入和錯誤狀態管理 - Option B)
     func submitOrder() {
-        // 呼叫 OrderManager 的最終提交方法，將表單數據傳遞給 OrderManager 處理
+        isSubmitting = true
+        submissionError = nil
+        
         orderManager.finalSubmitOrder(
             address: deliveryAddress,
             contact: contactNumber,
             payment: selectedPayment
         ) { success in
             
-            // 成功提交到 Firestore
-            if success {
-                print("【FIREBASE SUCCESS】訂單已成功寫入 Firestore！")
-                // 觸發跳轉到 OrderConfirmationView
-                isOrderSubmitted = true
-            } else {
-                // 顯示錯誤或保持在當前頁面
-                print("【FIREBASE FAILED】訂單提交失敗。")
+            DispatchQueue.main.async {
+                self.isSubmitting = false // 無論成功或失敗，都停止載入
+                
+                if success {
+                    print("【FIREBASE SUCCESS】訂單已成功寫入 Firestore！")
+                    self.isOrderSubmitted = true
+                } else {
+                    // 假設 OrderManager 內部沒有返回詳細錯誤，給出通用提示
+                    self.submissionError = "網路連線或伺服器錯誤，請稍後再試。"
+                    print("【FIREBASE FAILED】訂單提交失敗。")
+                }
             }
         }
     }
@@ -126,6 +175,8 @@ struct CheckoutView: View {
     manager.addItem(menuItem: MenuItem.sampleMenu[0], quantity: 1)
     manager.addItem(menuItem: MenuItem.sampleMenu[2], quantity: 1)
     
+    // 必須為預覽環境注入 AuthService，即使它是空的
     return CheckoutView()
         .environmentObject(manager)
+        .environmentObject(AuthService()) // 注入 AuthService
 }

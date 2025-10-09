@@ -25,8 +25,6 @@ struct HomecookApp: App {
     // 應用程式委託，用於處理 Firebase 設定
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     
-    // ⭐ 核心修正：確保所有 manager 都被正確且簡潔地初始化
-    
     // 認證服務 (AuthService)
     @StateObject var authService = AuthService()
     
@@ -36,24 +34,24 @@ struct HomecookApp: App {
     // 定位服務 (LocationManager)
     @StateObject var locationManager = LocationManager()
     
-    // CookSpot 專用 Manager (如果你決定保留它)
-    @StateObject var cookSpotManager = CookSpotManager()
+    // ⭐ 移除 CookSpotManager (已合併到 FirebaseManager)
+    // @StateObject var cookSpotManager = CookSpotManager() // <--- 移除此行
     
-    // ⭐ 修正點：FirebaseManager 變數名稱使用小寫駝峰，並移除類型標註
+    // FirebaseManager 現已接管 CookSpot 數據發布
     @StateObject var firebaseManager = FirebaseManager()
     
     
     var body: some Scene {
         WindowGroup {
             Group {
-                // ⭐ 測試模式：直接載入主要內容
                 ContentView()
                 // 統一將所有服務注入環境
                     .environmentObject(authService)
                     .environmentObject(orderManager)
                     .environmentObject(locationManager)
-                    .environmentObject(cookSpotManager)
-                    .environmentObject(firebaseManager) // FirebaseManager 現已注入
+                    // ⭐ 移除 cookSpotManager 的注入
+                    // .environmentObject(cookSpotManager) // <--- 移除此行
+                    .environmentObject(firebaseManager)
             }
         }
     }

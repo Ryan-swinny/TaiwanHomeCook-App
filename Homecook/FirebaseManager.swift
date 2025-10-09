@@ -1,62 +1,41 @@
-//
-//  FirebaseManager.swift
-//  Homecook
-//
-//  Created by Ryan.L on 10/7/2025.
-//
+// Homecook/FirebaseManager.swift
 
 import Foundation
 import Combine
-
-// ⚠️ 注意：這裡的 CookSpot 必須是主專案定義的結構體
+import FirebaseFirestore // ⭐ 修正：導入 FirebaseFirestore 以識別 ListenerRegistration
 
 class FirebaseManager: ObservableObject {
     
-    let cookSpotsPublisher = PassthroughSubject<[CookSpot], Never>()
+    @Published var cookSpots: [CookSpot] = []
     
     @Published var isLoading = true
     
-    private var cancellables = Set<AnyCancellable>()
+    // 導入 DatabaseService
+    private let dbService = DatabaseService()
+    
+    // 用於管理 Firestore 監聽的資源
+    private var listenerRegistration: ListenerRegistration? // 現在 ListenerRegistration 可以被識別
     
     init() {
-        startMockListener()
+        startListeningForCookSpots()
     }
     
-    // 模擬 Firebase 的 addSnapshotListener 函數
-    func startMockListener() {
-        print("【Firebase Manager】開始模擬實時數據監聽...")
+    func startListeningForCookSpots() {
+        print("【Firebase Manager】開始實時數據監聽...")
         
-        // ⭐ 核心修正：將模擬延遲從 1.5 秒增加到 3.0 秒
-        let delayInSeconds: Double = 3.0
+        listenerRegistration?.remove()
         
-        // 模擬數據延遲載入（例如，從網路獲取）
-        DispatchQueue.main.asyncAfter(deadline: .now() + delayInSeconds) { [weak self] in
-            guard let self = self else { return }
-            
-            // 模擬從 Firebase 獲取到最新的 CookSpot 列表
-            let latestSpots = CookSpot.sampleCookSpots
-            
-            // 通過 Publisher 發佈數據給所有訂閱者
-            self.cookSpotsPublisher.send(latestSpots)
-            
-            self.isLoading = false
-            print("【Firebase Manager】模擬數據載入完成，已發佈 \(latestSpots.count) 筆數據。")
-        }
-        
-        // 確保 Manager 訂閱自己
-        cookSpotsPublisher
-            .sink { _ in
-                // 這裡可以處理任何與數據流結束相關的邏輯
-            } receiveValue: { spots in
-                // 這裡可以放置數據到達時的任何管理邏輯
+        // 呼叫 DatabaseService 的訂閱方法
+        listenerRegistration = dbService.subscribeToCookSpots { [weak self] newSpots in
+            DispatchQueue.main.async {
+                self?.cookSpots = newSpots
+                self?.isLoading = false
+                print("【DATA SYNC】已接收 \(newSpots.count) 筆 CookSpot 數據。")
             }
-            .store(in: &cancellables)
+        }
     }
     
-    // 備用：一次性獲取數據的模擬函數（用於對比）
-    func fetchCookSpotsOnce(completion: @escaping ([CookSpot]) -> Void) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            completion(CookSpot.sampleCookSpots)
-        }
+    deinit {
+        listenerRegistration?.remove()
     }
 }

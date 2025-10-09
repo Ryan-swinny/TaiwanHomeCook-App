@@ -15,13 +15,13 @@ struct ContentView: View {
     @EnvironmentObject var orderManager: OrderManager
     @EnvironmentObject var firebaseManager: FirebaseManager
     
-    // 儲存實時數據
-    @State private var allCookSpots: [CookSpot] = []
-    
-    // 追蹤數據訂閱
-    @State private var cancellable: AnyCancellable?
+    // ⭐️ 修正：將 allCookSpots 變為計算屬性，直接從 Manager 讀取數據，移除 @State
+    var allCookSpots: [CookSpot] {
+        return firebaseManager.cookSpots
+    }
     
     // 根據定位結果，篩選出附近的私廚
+    // 邏輯保持不變，但現在直接依賴上面的計算屬性
     var nearbyCookSpots: [CookSpot] {
         locationManager.filterCookSpots(allSpots: allCookSpots)
     }
@@ -49,26 +49,11 @@ struct ContentView: View {
             }
         }()
         
-        // 將 onAppear 應用在最終的 View 實體上
+        // ⭐️ 修正：移除 .onAppear 區塊，因為訂閱已在 Manager 的 init 中處理
         return mainContent
-            .onAppear {
-                self.setupCookSpotsSubscription()
-            }
     }
     
-    // 設置 Combine 數據訂閱
-    func setupCookSpotsSubscription() {
-        // 清除舊的訂閱，確保只訂閱一次
-        cancellable?.cancel()
-        
-        // 訂閱 Manager 發佈者
-        cancellable = firebaseManager.cookSpotsPublisher
-            .receive(on: DispatchQueue.main) // 確保在主執行緒上更新 UI
-            .sink { latestSpots in // 移除 [weak self]，因為 ContentView 是 Struct
-                // 當收到新數據時，更新 @State 屬性
-                self.allCookSpots = latestSpots
-            }
-    }
+    // ⭐️ 修正：移除 func setupCookSpotsSubscription()
     
     // MARK: - Main Tab View (已授權或等待中)
     var mainTabView: some View {

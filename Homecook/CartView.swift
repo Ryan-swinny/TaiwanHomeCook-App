@@ -51,10 +51,14 @@ struct CartView: View {
             }
             // 使用 sheet 方式彈出 CheckoutView
             .sheet(isPresented: $isCheckoutPresented) {
+                // 修正：這裡的 CheckoutView 確保環境物件的傳遞
                 CheckoutView()
-                    .environmentObject(orderManager) // 必須傳遞環境物件
+                    .environmentObject(orderManager)
+                    // 這裡的 AuthService() 確保傳遞給 CheckoutView
+                    .environmentObject(AuthService())
             }
         }
+        // 修正：移除這裡可能存在的隱式 return 關鍵字
     }
     
     // 購物車總計的獨立視圖
@@ -151,18 +155,32 @@ struct CartItemRow: View {
             
             Spacer()
             
-            // 數量控制：使用 Stepper
-            Stepper("", value: Binding(
-                get: { item.quantity },
-                set: { newQuantity in
-                    // 呼叫 OrderManager 的 updateQuantity 方法來更新數量
-                    orderManager.updateQuantity(item: item, newQuantity: newQuantity)
+            // ⭐ 修正：使用自定義的加/減按鈕取代 Stepper (Level 4A)
+            HStack(spacing: 15) {
+                Button {
+                    // 減量
+                    orderManager.updateQuantity(item: item, newQuantity: item.quantity - 1)
+                } label: {
+                    Image(systemName: "minus.circle.fill")
                 }
-            ), in: 0...100)
-            .labelsHidden()
+                .buttonStyle(.plain)
+                .tint(.orange)
+                
+                Text("\(item.quantity)")
+                    .font(.headline)
+                    .frame(minWidth: 20)
+                
+                Button {
+                    // 加量
+                    orderManager.updateQuantity(item: item, newQuantity: item.quantity + 1)
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .tint(.orange)
+            }
             
             // 該商品的總價
-            // 使用新的格式化語法
             Text(item.totalItemPrice, format: .currency(code: "TWD").precision(.fractionLength(0)))
                 .font(.callout)
                 .fontWeight(.bold)
@@ -180,6 +198,11 @@ struct CartItemRow: View {
     previewManager.addItem(menuItem: MenuItem.sampleMenu[0], quantity: 2)
     previewManager.addItem(menuItem: MenuItem.sampleMenu[2], quantity: 1)
     
+    // 修正：明確建立 AuthService 實例來解決 Ambiguous use of 'init()'
+    let authService: AuthService = AuthService()
+    
     return CartView()
         .environmentObject(previewManager)
+        // 預覽也需要 AuthService，即使它是空的
+        .environmentObject(authService)
 }
